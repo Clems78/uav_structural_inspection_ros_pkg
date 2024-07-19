@@ -1,0 +1,19 @@
+<?xml version="1.0" ?>
+<!--
+  Demo world to show how to include a model from Gazebo Fuel.
+-->
+<sdf version="1.6">
+  <world name="fuel">
+ 
+    ....
+ 
+    <!-- mesh -->
+    <include>
+      <static>true</static>
+      <name>Cylinder</name>
+      <pose>0 0 0 0 0 0</pose>
+      <uri>/home/user/shared_volume/ros2_ws/src/irp_pkg/models/Cylinder/model.sdf</uri>
+    </include>
+ 
+  </world>
+</sdf>

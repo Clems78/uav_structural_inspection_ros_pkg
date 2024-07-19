@@ -1,3 +1,0 @@
-# irp_ros_pkg
-
-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

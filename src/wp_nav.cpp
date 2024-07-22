@@ -5,6 +5,10 @@
 #include <px4_msgs/msg/vehicle_local_position.hpp>
 #include <rclcpp/rclcpp.hpp>
 #include <stdint.h>
+#include <std_srvs/srv/trigger.hpp>
+#include <std_msgs/msg/bool.hpp>
+
+
 
 #include <chrono>
 #include <iostream>
@@ -30,6 +34,10 @@ public:
         auto qos = rclcpp::QoS(rclcpp::QoSInitialization::from_rmw(rmw_qos_profile_default))
                        .reliability(RMW_QOS_POLICY_RELIABILITY_BEST_EFFORT)
                        .durability(RMW_QOS_POLICY_DURABILITY_TRANSIENT_LOCAL);
+
+        // Define service client
+        client_ = this->create_client<std_srvs::srv::Trigger>("capture_image");
+
         
         //Publishers
         offboard_control_mode_publisher_ = this->create_publisher<OffboardControlMode>("/fmu/in/offboard_control_mode", 10);
@@ -89,18 +97,11 @@ public:
                     offboard_setpoint_counter_++;
 
                 }
-
             }
-
-
             // stop the counter after reaching 11
             if (offboard_setpoint_counter_ < 11) {
                 offboard_setpoint_counter_++;
             }
-
-            
-
-
         };
         timer_ = this->create_wall_timer(100ms, timer_callback,  timer_callback_group_);
     }
@@ -112,7 +113,7 @@ public:
 private:
 
 void local_position_callback(const px4_msgs::msg::VehicleLocalPosition::SharedPtr msg)
-{
+{   
     //RCLCPP_INFO(this->get_logger(), "X: %f m / Y: %f m / Z: %f", msg->x, msg->y,  msg->z);
     std::vector<float> local_position = {msg->x, msg->y, msg->z};
 
@@ -121,37 +122,42 @@ void local_position_callback(const px4_msgs::msg::VehicleLocalPosition::SharedPt
             this->waypoint_reached = check_waypoint_reached(this->waypoints_[this->current_waypoint_], local_position);
             if (this->waypoint_reached)
             {
-                this->list_waypoints_reached_[current_waypoint_] = true;
+                this->list_waypoints_reached_[current_waypoint_] = true;                
             }
         }
 }
 
-
-
+    // Callback group
     rclcpp::CallbackGroup::SharedPtr timer_callback_group_;
     rclcpp::CallbackGroup::SharedPtr local_position_callback_group_;
 
-
+    // Timer / sub / pub / serv
     rclcpp::TimerBase::SharedPtr timer_;
-
     rclcpp::Publisher<OffboardControlMode>::SharedPtr offboard_control_mode_publisher_;
     rclcpp::Publisher<TrajectorySetpoint>::SharedPtr trajectory_setpoint_publisher_;
     rclcpp::Publisher<VehicleCommand>::SharedPtr vehicle_command_publisher_;
-
     rclcpp::Subscription<px4_msgs::msg::VehicleLocalPosition>::SharedPtr local_position_subscription_;
+    rclcpp::Client<std_srvs::srv::Trigger>::SharedPtr client_;
 
-    std::atomic<uint64_t> timestamp_; //!< common synced timestamped
 
-    uint64_t offboard_setpoint_counter_; //!< counter for the number of setpoints sent
-    int current_waypoint_;
-    std::vector<std::vector<float>> waypoints_; //!< List of waypoints (latitude, longitude, altitude, yaw)
-
+    // Function 
     void publish_offboard_control_mode();
     void publish_vehicle_command(uint16_t command, float param1 = 0.0, float param2 = 0.0, float param3 = 0.0, float param4 = 0.0, float param5 = 0.0, float param6 = 0.0, float param7 = 0.0);
     void publish_trajectory_setpoint(std::vector<float> waypoints);
     bool check_waypoint_reached(std::vector<float> waypoint, std::vector<float> local_position);
+    void capture_image_call();
+    void response_callback(rclcpp::Client<std_srvs::srv::Trigger>::SharedFuture future);
+    
+
+    // Variables
+    std::atomic<uint64_t> timestamp_; //!< common synced timestamped
+    uint64_t offboard_setpoint_counter_; //!< counter for the number of setpoints sent
+    int current_waypoint_;
+    std::vector<std::vector<float>> waypoints_; //!< List of waypoints (latitude, longitude, altitude, yaw)
     bool waypoint_reached = false;
     std::vector<bool> list_waypoints_reached_;
+    bool service_done_ = false;
+    int capture_image_counter_ = 0;
 
 };
 /**
@@ -172,22 +178,23 @@ bool OffboardControl::check_waypoint_reached(std::vector<float> waypoint, std::v
 
     float distance = sqrt(pow(x_wp - x, 2) + pow(y_wp - y, 2) + pow(z_wp - z, 2));
 
-    //RCLCPP_INFO(this->get_logger(), "Distance to waypoint is: %f m", distance);
-
-
     if (distance <= delta_error && !list_waypoints_reached_[current_waypoint_])
     {
         result = true;
+        capture_image_call();
         RCLCPP_INFO(this->get_logger(), "Waypoint reached");
+
+        //std::cout << std::boolalpha;  // Enable textual representation of boolean values
+        //std::cout << "Service done status: " << service_done_ << std::endl;
+
     } else if (distance <= delta_error)
     {
         result = true;
     }else
     {
         result = false;
+        service_done_ = false;
     }
-
-
     return result;
 }
 
@@ -199,7 +206,6 @@ void OffboardControl::land()
     publish_vehicle_command(VehicleCommand::VEHICLE_CMD_NAV_LAND);
     RCLCPP_INFO(this->get_logger(), "Land command sent");
 }
-
 
 /**
  * @brief Send a command to Arm the vehicle
@@ -235,7 +241,6 @@ void OffboardControl::publish_offboard_control_mode()
     offboard_control_mode_publisher_->publish(msg);
 }
 
-
 void OffboardControl::publish_trajectory_setpoint(const std::vector<float> waypoints)
 {
 	TrajectorySetpoint msg{};
@@ -245,8 +250,6 @@ void OffboardControl::publish_trajectory_setpoint(const std::vector<float> waypo
 	trajectory_setpoint_publisher_->publish(msg);
 
     //RCLCPP_INFO(this->get_logger(), "publishing waypoint");
-
-
 }
 
 /**
@@ -280,6 +283,36 @@ void OffboardControl::publish_vehicle_command(uint16_t command, float param1, fl
     vehicle_command_publisher_->publish(msg);
     //RCLCPP_INFO(this->get_logger(), "Vehicle command sent: command=%d, params=[%f, %f, %f, %f, %f, %f, %f]",command, param1, param2, param3, param4, param5, param6, param7);
 }
+
+void OffboardControl::capture_image_call()
+{
+    while (!client_->wait_for_service(500ms))
+    {
+        if (!rclcpp::ok())
+        {
+            RCLCPP_ERROR(this->get_logger(), "Client interrupted while waiting for service. Terminating...");
+            return;
+        }
+        RCLCPP_INFO(this->get_logger(), "Service unavailable. Waiting for service..");
+    }
+
+    auto request = std::make_shared<std_srvs::srv::Trigger::Request>();
+    service_done_ = false;
+    auto result_future = client_->async_send_request(request, std::bind(&OffboardControl::response_callback, this, std::placeholders::_1));
+ }
+
+void OffboardControl::response_callback(rclcpp::Client<std_srvs::srv::Trigger>::SharedFuture future) 
+{
+    auto status = future.wait_for(250ms);
+    if (status == std::future_status::ready) {
+        RCLCPP_INFO(this->get_logger(), "Image and location capture : Success");
+        service_done_ = true;
+    } else {
+        RCLCPP_INFO(this->get_logger(), "Service In-Progress...");
+    }
+}
+
+//bool OffboardControl::is_service_done() const { return this->service_done_; }
 
 int main(int argc, char *argv[])
 {

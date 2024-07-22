@@ -11,8 +11,12 @@
 
   <depend>rclcpp</depend>
   <depend>std_msgs</depend>
+  <depend>std_srvs</depend>
   <depend>px4_msgs</depend>
   <depend>px4_ros_com</depend>
+  <depend>sensor_msgs</depend>
+  <depend>cv_bridge</depend>
+  <depend>OpenCV</depend>
 
 
   <test_depend>ament_lint_auto</test_depend>

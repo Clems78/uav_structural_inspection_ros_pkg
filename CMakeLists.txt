@@ -9,8 +9,12 @@ endif()
 find_package(ament_cmake REQUIRED)
 find_package(rclcpp REQUIRED)
 find_package(std_msgs REQUIRED)
+find_package(std_srvs REQUIRED)
 find_package(px4_msgs REQUIRED)
 find_package(px4_ros_com REQUIRED)
+find_package(sensor_msgs REQUIRED)
+find_package(cv_bridge REQUIRED)
+find_package(OpenCV REQUIRED)
 
 if(BUILD_TESTING)
   find_package(ament_lint_auto REQUIRED)
@@ -26,11 +30,19 @@ endif()
 
 # Build 
 add_executable(wp_nav src/wp_nav.cpp)
-ament_target_dependencies(wp_nav rclcpp px4_msgs px4_ros_com)
+ament_target_dependencies(wp_nav rclcpp px4_msgs px4_ros_com std_srvs)
+
+add_executable(wp_camera_service_server src/wp_camera_service_server.cpp)
+ament_target_dependencies(wp_camera_service_server rclcpp std_msgs sensor_msgs cv_bridge OpenCV std_srvs px4_msgs)
+
+#add_executable(waypoint_navigator src/waypoint_navigator.cpp)
+#ament_target_dependencies(waypoint_navigator rclcpp px4_msgs px4_ros_com std_srvs)
 
 # Install
 install(TARGETS
   wp_nav
+  wp_camera_service_server
+  #waypoint_navigator
   DESTINATION lib/${PROJECT_NAME}
  )
 

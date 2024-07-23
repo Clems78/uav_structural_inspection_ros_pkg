@@ -15,6 +15,8 @@ find_package(px4_ros_com REQUIRED)
 find_package(sensor_msgs REQUIRED)
 find_package(cv_bridge REQUIRED)
 find_package(OpenCV REQUIRED)
+find_package(geometry_msgs REQUIRED)
+
 
 if(BUILD_TESTING)
   find_package(ament_lint_auto REQUIRED)
@@ -33,7 +35,7 @@ add_executable(wp_nav src/wp_nav.cpp)
 ament_target_dependencies(wp_nav rclcpp px4_msgs px4_ros_com std_srvs)
 
 add_executable(wp_camera_service_server src/wp_camera_service_server.cpp)
-ament_target_dependencies(wp_camera_service_server rclcpp std_msgs sensor_msgs cv_bridge OpenCV std_srvs px4_msgs)
+ament_target_dependencies(wp_camera_service_server rclcpp std_msgs sensor_msgs cv_bridge OpenCV std_srvs px4_msgs geometry_msgs)
 
 #add_executable(waypoint_navigator src/waypoint_navigator.cpp)
 #ament_target_dependencies(waypoint_navigator rclcpp px4_msgs px4_ros_com std_srvs)

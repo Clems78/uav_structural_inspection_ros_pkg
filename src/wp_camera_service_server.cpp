@@ -12,6 +12,8 @@
 #include <cv_bridge/cv_bridge.h>
 
 #include <px4_msgs/msg/vehicle_local_position.hpp>
+#include <geometry_msgs/msg/pose_array.hpp>
+
 
 
 namespace fs = std::filesystem;
@@ -25,6 +27,7 @@ public:
     //Callback groups
     position_callback_group_ = this->create_callback_group(rclcpp::CallbackGroupType::MutuallyExclusive);
     image_callback_group_ = this->create_callback_group(rclcpp::CallbackGroupType::MutuallyExclusive);
+    gt_pose_callback_group_ = this->create_callback_group(rclcpp::CallbackGroupType::MutuallyExclusive);
 
     //Define options for subscribers
     rclcpp::SubscriptionOptions options_position;
@@ -32,6 +35,9 @@ public:
 
     rclcpp::SubscriptionOptions options_image;
     options_image.callback_group = image_callback_group_;
+
+    rclcpp::SubscriptionOptions options_gt_pose;
+    options_gt_pose.callback_group = gt_pose_callback_group_;
 
     // Define QoS settings to match publisher
     auto qos = rclcpp::QoS(rclcpp::QoSInitialization::from_rmw(rmw_qos_profile_default))
@@ -51,6 +57,7 @@ public:
 
     position_sub_ = this->create_subscription<px4_msgs::msg::VehicleLocalPosition>("/fmu/out/vehicle_local_position", qos, std::bind(&WaypointCameraService::local_position_callback, this, std::placeholders::_1), options_position);
 
+    gt_pose_sub_ = this->create_subscription<geometry_msgs::msg::PoseArray>("/world/irp/pose/info", 10, std::bind(&WaypointCameraService::gt_pose_callback, this, std::placeholders::_1), options_gt_pose);
 
     // Create directory if it doesn't exist
     fs::path save_dir = fs::path(getenv("HOME")) / "ros_saved_images";
@@ -62,25 +69,33 @@ public:
     save_dir_position_ = save_dir_position.string();
 
     // Open the mission file
-    open_mission_file();
+    open_estimated_pose_file();
+    open_gt_pose_file();
+
 
     //Variables
     this->image_received_ = false;
     this-> waypoint_id = 1;
+    this-> waypoint_id_gt = 1;
   }
 
   ~WaypointCameraService()
   {
     // Close the mission file if it is open
-    if (mission_file_.is_open())
+    if (estimated_pose_file_.is_open())
     {
-        mission_file_.close();
+        estimated_pose_file_.close();
+    }
+        // Close the mission file if it is open
+    if (gt_pose_file_.is_open())
+    {
+        gt_pose_file_.close();
     }
   }
 
 private:
 
-  void open_mission_file()
+  void open_estimated_pose_file()
   {
     // Get current date and time for the file name
     auto t = std::time(nullptr);
@@ -90,18 +105,48 @@ private:
     auto datetime = oss.str();
 
     // File name
-    std::string file_name = save_dir_position_ + "/mission_" + datetime + ".csv";
+    std::string file_name = save_dir_position_ + "/estimated_pose_" + datetime + ".csv";
 
     // Open file in append mode
-    mission_file_.open(file_name, std::ios_base::app);
-    if (mission_file_.is_open())
+    estimated_pose_file_.open(file_name, std::ios_base::app);
+    if (estimated_pose_file_.is_open())
     {
         // Write header if the file is new
-        if (mission_file_.tellp() == 0)
+        if (estimated_pose_file_.tellp() == 0)
         {
-            mission_file_.setf(std::ios::fixed, std::ios::floatfield);
-            mission_file_.precision(6);
-            mission_file_ << "Waypoint,X,Y,Z,Orientation" << std::endl;
+            estimated_pose_file_.setf(std::ios::fixed, std::ios::floatfield);
+            estimated_pose_file_.precision(6);
+            estimated_pose_file_ << "Waypoint,X,Y,Z,Orientation" << std::endl;
+        }
+    }
+    else
+    {
+        RCLCPP_ERROR(this->get_logger(), "Failed to open file: %s", file_name.c_str());
+    }
+  }
+
+    void open_gt_pose_file()
+  {
+    // Get current date and time for the file name
+    auto t = std::time(nullptr);
+    auto tm = *std::localtime(&t);
+    std::ostringstream oss;
+    oss << std::put_time(&tm, "%Y-%m-%d_%H-%M-%S");
+    auto datetime = oss.str();
+
+    // File name
+    std::string file_name = save_dir_position_ + "/gt_pose_" + datetime + ".csv";
+
+    // Open file in append mode
+    gt_pose_file_.open(file_name, std::ios_base::app);
+    if (gt_pose_file_.is_open())
+    {
+        // Write header if the file is new
+        if (gt_pose_file_.tellp() == 0)
+        {
+            gt_pose_file_.setf(std::ios::fixed, std::ios::floatfield);
+            gt_pose_file_.precision(6);
+            gt_pose_file_ << "Waypoint,X pose,Y pose,Z pose,X orientation,Y orientation,Z orientation,W orientation" << std::endl;
         }
     }
     else
@@ -156,35 +201,55 @@ private:
 
   void local_position_callback(const px4_msgs::msg::VehicleLocalPosition::SharedPtr msg)
   {
-
-    //std::cout << std::boolalpha;  // Enable textual representation of boolean values
-    //std::cout << "Service done status: " << this->image_received_ << std::endl;
-
-    //RCLCPP_INFO(this->get_logger(), "Waypoint ID : %d", waypoint_id);
     if (this->image_received_)
     {
-        if (mission_file_.is_open() && waypoint_id == this->image_count_)
-        {
-            // Write data
-            mission_file_ << "wp " << waypoint_id-1 << "," << msg->x << "," << msg->y << "," << msg->z << "," << msg->heading << std::endl;
-              RCLCPP_INFO(this->get_logger(), "Viewpoints saved");
+      if (estimated_pose_file_.is_open() && waypoint_id == this->image_count_)
+      {
+        // Write data
+        estimated_pose_file_ << "wp " << waypoint_id-1 << "," << msg->x << "," << msg->y << "," << msg->z << "," << msg->heading << std::endl;
+          RCLCPP_INFO(this->get_logger(), "Estimated pose saved");
+
+        // Increment waypoint_id for next waypoint
+        waypoint_id++;
+      }
+    }
+  }
+
+  void gt_pose_callback(const geometry_msgs::msg::PoseArray::SharedPtr msg)
+  {
+    size_t x500_index = 2;
+    auto pose = msg->poses[x500_index];
+    RCLCPP_INFO(this->get_logger(), "GT: X: %f m / Y: %f m / Z: %f", pose.position.x, pose.position.y,  pose.position.z);
 
 
-            // Increment waypoint_id for next waypoint
-            waypoint_id++;
-        }
+    if (this->image_received_)
+    {
+      if (gt_pose_file_.is_open() && waypoint_id_gt == this->image_count_)
+      {
+        // Write data (x and y switched to matct matlab and localvehicle setpoint frame )
+        gt_pose_file_ << "wp " << waypoint_id_gt-1 << "," << pose.position.y << "," << pose.position.x << "," << pose.position.z << "," << pose.orientation.x << "," << pose.orientation.y << "," << pose.orientation.z << "," << pose.orientation.w << std::endl;
+        RCLCPP_INFO(this->get_logger(), "Ground truth pose saved");
+
+
+        // Increment waypoint_id for next waypoint
+        waypoint_id_gt++;
+      }
     }
   }
 
   // Callback group
   rclcpp::CallbackGroup::SharedPtr position_callback_group_;
   rclcpp::CallbackGroup::SharedPtr image_callback_group_;
+  rclcpp::CallbackGroup::SharedPtr gt_pose_callback_group_;
+
 
   // Pub and Sub and Serv
   rclcpp::Publisher<std_msgs::msg::Bool>::SharedPtr trigger_pub_;
   rclcpp::Service<std_srvs::srv::Trigger>::SharedPtr service_;
   rclcpp::Subscription<sensor_msgs::msg::Image>::SharedPtr image_sub_;
   rclcpp::Subscription<px4_msgs::msg::VehicleLocalPosition>::SharedPtr position_sub_;
+  rclcpp::Subscription<geometry_msgs::msg::PoseArray>::SharedPtr gt_pose_sub_;
+
 
   // Variables
   bool image_received_; 
@@ -192,7 +257,9 @@ private:
   std::string save_dir_position_;
   size_t image_count_;
   int waypoint_id;
-  std::ofstream mission_file_;
+  int waypoint_id_gt;
+  std::ofstream estimated_pose_file_;
+  std::ofstream gt_pose_file_;
 };
 
 int main(int argc, char **argv)

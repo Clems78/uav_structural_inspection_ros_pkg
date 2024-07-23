@@ -7,8 +7,7 @@
 #include <stdint.h>
 #include <std_srvs/srv/trigger.hpp>
 #include <std_msgs/msg/bool.hpp>
-
-
+#include <cmath>
 
 #include <chrono>
 #include <iostream>
@@ -47,7 +46,9 @@ public:
         //Subscribers
         local_position_subscription_ = this->create_subscription<px4_msgs::msg::VehicleLocalPosition>("/fmu/out/vehicle_local_position", qos, std::bind(&OffboardControl::local_position_callback, this, std::placeholders::_1), options_local_position);
 
+
         // Define your list of waypoints here (latitude, longitude, altitude, yaw)
+        /*
         waypoints_ = {
             {0, 0, -10.0, 0.0},  // Waypoint 1
             {10, 0, -10, 0.0},  // Waypoint 2
@@ -59,6 +60,25 @@ public:
             {0, 10, -10, 0.0},  // Waypoint 2
             {0, 0, -10, 0.0},  // Waypoint 2
             // Add more waypoints as needed...
+        };*/
+
+        waypoints_ = 
+        {   {0.8021, 1.1067, -3.2488, 90},
+            {1.9020, 1.1067, -3.1909, 90},
+            {1.9020, 1.1067, -4.4612, 90},
+            {1.8021, 1.1067, -5.7891, 90},
+            {1.9012, 1.1067, -7.0002, 90},
+            {0.8010, 1.1067, -7.0555, 90},
+            {-0.4949, 1.1067, -6.9982, 90},
+            {-1.7974, 1.1067, -7.0553, 0},
+            {-1.9936, 1.1067, -6.0161, 0},
+            {-0.7979, 1.1067, -5.6736, 0},
+            {0.5021, 1.1067, -5.8468, 0},
+            {0.5021, 1.1067, -4.5767, 0},
+            {-0.7979, 1.1067, -4.4035, 0},
+            {-1.9963, 1.1067, -4.6339, 0},
+            {-1.7979, 1.1067, -3.2488, 0},
+            {-0.4979, 1.1067, -3.1910, 0},
         };
 
         this->current_waypoint_ = 0;
@@ -115,7 +135,7 @@ private:
 void local_position_callback(const px4_msgs::msg::VehicleLocalPosition::SharedPtr msg)
 {   
     //RCLCPP_INFO(this->get_logger(), "X: %f m / Y: %f m / Z: %f", msg->x, msg->y,  msg->z);
-    std::vector<float> local_position = {msg->x, msg->y, msg->z};
+    std::vector<float> local_position = {msg->x, msg->y, msg->z, msg->heading};
 
     if (static_cast<std::size_t>(current_waypoint_) < waypoints_.size())    
         {
@@ -166,19 +186,27 @@ void local_position_callback(const px4_msgs::msg::VehicleLocalPosition::SharedPt
 bool OffboardControl::check_waypoint_reached(std::vector<float> waypoint, std::vector<float> local_position)
 {
     bool result = false;
-    float delta_error = 1;
+    float delta_pose_error = 0.15;
+    float delta_heading_error = 1; // degree 
 
     float x_wp = waypoint[0];
     float y_wp = waypoint[1];
     float z_wp = waypoint[2];
+    float heading_wp = waypoint[3]; //degree
 
     float x = local_position[0];
     float y = local_position[1];
     float z = local_position[2];
+    float heading = local_position[3]; // rad
 
+
+    float heading_error = abs(heading_wp - (heading * 180 / M_PI)); //degree
     float distance = sqrt(pow(x_wp - x, 2) + pow(y_wp - y, 2) + pow(z_wp - z, 2));
 
-    if (distance <= delta_error && !list_waypoints_reached_[current_waypoint_])
+    RCLCPP_INFO(this->get_logger(), "Distance error : %f m", distance);
+    RCLCPP_INFO(this->get_logger(), "Heading error : %f degree", heading_error);
+
+    if (distance <= delta_pose_error && !list_waypoints_reached_[current_waypoint_] && (heading_error <= delta_heading_error))
     {
         result = true;
         capture_image_call();
@@ -187,7 +215,7 @@ bool OffboardControl::check_waypoint_reached(std::vector<float> waypoint, std::v
         //std::cout << std::boolalpha;  // Enable textual representation of boolean values
         //std::cout << "Service done status: " << service_done_ << std::endl;
 
-    } else if (distance <= delta_error)
+    } else if (distance <= delta_pose_error && (heading_error <= delta_heading_error))
     {
         result = true;
     }else
@@ -245,7 +273,7 @@ void OffboardControl::publish_trajectory_setpoint(const std::vector<float> waypo
 {
 	TrajectorySetpoint msg{};
     msg.position = {waypoints[0], waypoints[1], waypoints[2]};
-    msg.yaw = waypoints[3];
+    msg.yaw = waypoints[3] * M_PI / 180; //degree to radian
 	msg.timestamp = this->get_clock()->now().nanoseconds() / 1000;
 	trajectory_setpoint_publisher_->publish(msg);
 

@@ -11,6 +11,9 @@
 
 #include <chrono>
 #include <iostream>
+#include <fstream>   // Required for std::ifstream
+#include <string>
+#include <sstream>
 
 using namespace std::chrono;
 using namespace std::chrono_literals;
@@ -45,7 +48,11 @@ public:
 
         //Subscribers
         local_position_subscription_ = this->create_subscription<px4_msgs::msg::VehicleLocalPosition>("/fmu/out/vehicle_local_position", qos, std::bind(&OffboardControl::local_position_callback, this, std::placeholders::_1), options_local_position);
-
+       
+        // Load waypoints from file
+        // Hardcoded file path
+        file_path_ = "/home/clem/waypoints_ros.txt";
+        load_waypoints_from_file(file_path_);
 
         // Define your list of waypoints here (latitude, longitude, altitude, yaw)
         /*
@@ -62,28 +69,90 @@ public:
             // Add more waypoints as needed...
         };*/
 
-        waypoints_ = 
-        {   {0.8021, 1.1067, -3.2488, 90},
-            {1.9020, 1.1067, -3.1909, 90},
-            {1.9020, 1.1067, -4.4612, 90},
-            {1.8021, 1.1067, -5.7891, 90},
-            {1.9012, 1.1067, -7.0002, 90},
-            {0.8010, 1.1067, -7.0555, 90},
-            {-0.4949, 1.1067, -6.9982, 90},
-            {-1.7974, 1.1067, -7.0553, 0},
-            {-1.9936, 1.1067, -6.0161, 0},
-            {-0.7979, 1.1067, -5.6736, 0},
-            {0.5021, 1.1067, -5.8468, 0},
-            {0.5021, 1.1067, -4.5767, 0},
-            {-0.7979, 1.1067, -4.4035, 0},
-            {-1.9963, 1.1067, -4.6339, 0},
-            {-1.7979, 1.1067, -3.2488, 0},
-            {-0.4979, 1.1067, -3.1910, 0},
-        };
+        // waypoints_ = 
+        // {   
+        //     {-0, 0, -3, 90},
+        //     {-0.8021, 1.1067, -2.8488, 90},
+        //     {-1.9020, 1.1067, -2.7909, 90},
+        //     {-1.9020, 1.1067, -4.0612, 90},
+        //     {-1.8021, 1.1067, -5.3891, 90},
+        //     {-1.9012, 1.1067, -6.6002, 90},
+        //     {-0.8010, 1.1067, -6.6555, 90},
+        //     {0.4949, 1.1067, -6.5982, 90},
+        //     {1.7974, 1.1067, -6.6553, 90},
+        //     {1.9936, 1.1067, -5.6161, 90},
+        //     {0.7979, 1.1067, -5.2736, 90},
+        //     {-0.5021, 1.1067, -5.4468, 90},
+        //     {-0.5021, 1.1067, -4.1767, 90},
+        //     {0.7979, 1.1067, -4.0035, 90},
+        //     {1.9963, 1.1067, -4.2339, 90},
+        //     {1.7979, 1.1067, -2.8488, 90},
+        //     {0.4979, 1.1067, -2.7910, 90},
+        //     {-0, 0, -3, 90}
+        // };
+
+       /* waypoints_ = 
+        {   
+            {0, 0, -3, 90},
+            {0.8021, 1.1067, -2.8488, 90},
+            {1.9020, 1.1067, -2.7909, 90},
+            {1.9020, 1.1067, -4.0612, 90},
+            {0.5021, 1.1067, -4.1767, 90},
+            {0.5021, 1.1067, -5.4468, 90},
+            {1.8021, 1.1067, -5.3891, 90},
+            {1.9012, 1.1067, -6.6002, 90},
+            {0.8010, 1.1067, -6.6555, 90},
+            {-0.4949, 1.1067, -6.5982, 90},
+            {-1.7974, 1.1067, -6.6553, 90},
+            {-1.9936, 1.1067, -5.6161, 90},
+            {-0.7979, 1.1067, -5.2736, 90},
+            {-0.7979, 1.1067, -4.0035, 90},
+            {-1.9963, 1.1067, -4.2339, 90},
+            {-1.7979, 1.1067, -2.8488, 90},
+            {-0.4979, 1.1067, -2.7910, 90},
+            {0, 0, -3, 90},
+        };*/
+
+      /*  waypoints_ = 
+{   
+    {0.000000, 0.000000, -3.000000, 90.000000},
+    {3.202973, 2.061287, -5.426722, -163.585669},
+    {4.171244, 4.015697, -6.313982, 11.451390},
+    {4.169587, 4.007616, -7.269048, -91.180720},
+    {4.178064, 4.050165, -8.217822, 114.135129},
+    {3.837413, 3.025188, -9.186965, -173.641222},
+    {2.799296, 8.102297, -9.427508, 11.449738},
+    {2.875895, 8.034802, -5.274360, -174.995143},
+    {-0.134678, 9.167949, -6.241913, 11.909695},
+    {-0.096890, 9.168680, -7.200262, -105.647375},
+    {-1.166410, 9.015976, -8.153139, 114.261873},
+    {-3.086694, 7.890169, -9.127003, -91.113082},
+    {-3.697599, 7.101848, -5.441849, 114.115177},
+    {-4.291271, 5.365134, -6.284848, -135.207472},
+    {-4.146781, 6.087020, -7.382115, 41.369292},
+    {-4.305832, 5.244985, -8.226882, -149.164933},
+    {-0.773091, 0.655660, -9.186088, 25.908099},
+    {-1.801917, 0.973861, -8.226417, 99.691149},
+    {-1.764408, 0.957055, -7.270929, -47.064894},
+    {-1.811658, 0.978247, -6.311987, -49.108335},
+    {-2.669054, 1.498699, -4.950245, 128.214700},
+    {0.000000, 0.000000, -3.000000, 90.000000}
+};*/
+
+
+
+
+
+        //for (size_t i = 0; i < waypoints_.size(); ++i)
+        //{
+        //RCLCPP_INFO(this->get_logger(), "WP %f : X : %f, Y : %f, Z: %f, Yaw: %f",i, waypoints_[i][0], waypoints_[i][1], waypoints_[i][2], waypoints_[i][3]);
+        //}
 
         this->current_waypoint_ = 0;
         offboard_setpoint_counter_ = 0;
         list_waypoints_reached_.assign(waypoints_.size(), false);
+        list_waypoints_reached_global_.assign(waypoints_.size(), false);
+
 
 
         auto timer_callback = [this]() -> void {
@@ -94,7 +163,7 @@ public:
 
                 // Arm the vehicle
                 this->arm();
-                this->publish_vehicle_command(VehicleCommand::VEHICLE_CMD_DO_CHANGE_SPEED, 1, 1, -1);
+                this->publish_vehicle_command(VehicleCommand::VEHICLE_CMD_DO_CHANGE_SPEED, 1, 1);
             }
 
             // OffboardControlMode needs to be paired with TrajectorySetpoint
@@ -103,10 +172,16 @@ public:
             if (static_cast<std::size_t>(current_waypoint_) < waypoints_.size())            
             {
                 publish_trajectory_setpoint(waypoints_[current_waypoint_]);
+                RCLCPP_INFO(this->get_logger(), "WP %d : X : %f, Y : %f, Z: %f, Yaw: %f", current_waypoint_, 
+                waypoints_[current_waypoint_][0], waypoints_[current_waypoint_][1], waypoints_[current_waypoint_][2], waypoints_[current_waypoint_][3]);
 
-                if (this->waypoint_reached)
+                if (this->waypoint_reached && this->flag_) 
                 {
+
                     this->current_waypoint_++;
+                    RCLCPP_INFO(this->get_logger(), "current waypoint: %d",current_waypoint_);
+                    this->flag_ = false;
+      
                 }
             } else
             {
@@ -132,6 +207,47 @@ public:
 
 private:
 
+ void load_waypoints_from_file(const std::string &file_path)
+    {
+        std::ifstream file(file_path);
+        if (!file.is_open())
+        {
+            RCLCPP_ERROR(this->get_logger(), "Error opening file: %s", file_path.c_str());
+            return;
+        }
+
+        waypoints_.clear();
+        std::string line;
+        while (std::getline(file, line))
+        {
+            std::vector<float> waypoint;
+            std::stringstream ss(line);
+            float value;
+            while (ss >> value)
+            {
+                waypoint.push_back(value);
+                if (ss.peek() == ' ' || ss.peek() == '\t')
+                    ss.ignore();
+            }
+            if (waypoint.size() == 4) // Ensure there are exactly 4 values: x, y, z, heading
+            {
+                waypoints_.push_back(waypoint);
+            }
+            else
+            {
+                RCLCPP_WARN(this->get_logger(), "Skipping malformed line: %s", line.c_str());
+            }
+        }
+
+        file.close();
+        RCLCPP_INFO(this->get_logger(), "Loaded %zu waypoints from file: %s", waypoints_.size(), file_path.c_str());
+        for (size_t i = 0; i < waypoints_.size(); ++i)
+        {
+            RCLCPP_INFO(this->get_logger(), "WP : X : %f, Y : %f, Z: %f, Yaw: %f", 
+                        waypoints_[i][0], waypoints_[i][1], waypoints_[i][2], waypoints_[i][3]);
+        }
+    }
+
 void local_position_callback(const px4_msgs::msg::VehicleLocalPosition::SharedPtr msg)
 {   
     //RCLCPP_INFO(this->get_logger(), "X: %f m / Y: %f m / Z: %f", msg->x, msg->y,  msg->z);
@@ -140,9 +256,10 @@ void local_position_callback(const px4_msgs::msg::VehicleLocalPosition::SharedPt
     if (static_cast<std::size_t>(current_waypoint_) < waypoints_.size())    
         {
             this->waypoint_reached = check_waypoint_reached(this->waypoints_[this->current_waypoint_], local_position);
-            if (this->waypoint_reached)
+            if (this->waypoint_reached && !list_waypoints_reached_[current_waypoint_])
             {
-                this->list_waypoints_reached_[current_waypoint_] = true;                
+                this->list_waypoints_reached_[current_waypoint_] = true;
+                this->flag_ = true;                
             }
         }
 }
@@ -159,7 +276,6 @@ void local_position_callback(const px4_msgs::msg::VehicleLocalPosition::SharedPt
     rclcpp::Subscription<px4_msgs::msg::VehicleLocalPosition>::SharedPtr local_position_subscription_;
     rclcpp::Client<std_srvs::srv::Trigger>::SharedPtr client_;
 
-
     // Function 
     void publish_offboard_control_mode();
     void publish_vehicle_command(uint16_t command, float param1 = 0.0, float param2 = 0.0, float param3 = 0.0, float param4 = 0.0, float param5 = 0.0, float param6 = 0.0, float param7 = 0.0);
@@ -168,7 +284,6 @@ void local_position_callback(const px4_msgs::msg::VehicleLocalPosition::SharedPt
     void capture_image_call();
     void response_callback(rclcpp::Client<std_srvs::srv::Trigger>::SharedFuture future);
     
-
     // Variables
     std::atomic<uint64_t> timestamp_; //!< common synced timestamped
     uint64_t offboard_setpoint_counter_; //!< counter for the number of setpoints sent
@@ -176,9 +291,11 @@ void local_position_callback(const px4_msgs::msg::VehicleLocalPosition::SharedPt
     std::vector<std::vector<float>> waypoints_; //!< List of waypoints (latitude, longitude, altitude, yaw)
     bool waypoint_reached = false;
     std::vector<bool> list_waypoints_reached_;
+    std::vector<bool> list_waypoints_reached_global_;
     bool service_done_ = false;
     int capture_image_counter_ = 0;
-
+    std::string file_path_; 
+    bool flag_ = false;
 };
 /**
  * @brief Check if waypoint is reached 
@@ -186,7 +303,7 @@ void local_position_callback(const px4_msgs::msg::VehicleLocalPosition::SharedPt
 bool OffboardControl::check_waypoint_reached(std::vector<float> waypoint, std::vector<float> local_position)
 {
     bool result = false;
-    float delta_pose_error = 0.15;
+    float delta_pose_error = 0.2;
     float delta_heading_error = 1; // degree 
 
     float x_wp = waypoint[0];
@@ -199,18 +316,18 @@ bool OffboardControl::check_waypoint_reached(std::vector<float> waypoint, std::v
     float z = local_position[2];
     float heading = local_position[3]; // rad
 
-
     float heading_error = abs(heading_wp - (heading * 180 / M_PI)); //degree
     float distance = sqrt(pow(x_wp - x, 2) + pow(y_wp - y, 2) + pow(z_wp - z, 2));
 
-    RCLCPP_INFO(this->get_logger(), "Distance error : %f m", distance);
-    RCLCPP_INFO(this->get_logger(), "Heading error : %f degree", heading_error);
+    //RCLCPP_INFO(this->get_logger(), "Distance error : %f m", distance);
+    //RCLCPP_INFO(this->get_logger(), "Heading error : %f degree", heading_error);
 
     if (distance <= delta_pose_error && !list_waypoints_reached_[current_waypoint_] && (heading_error <= delta_heading_error))
     {
         result = true;
         capture_image_call();
-        RCLCPP_INFO(this->get_logger(), "Waypoint reached");
+        RCLCPP_INFO(this->get_logger(), "Waypoint %d reached", current_waypoint_);
+        //this-> wp_flag_ = true;
 
         //std::cout << std::boolalpha;  // Enable textual representation of boolean values
         //std::cout << "Service done status: " << service_done_ << std::endl;

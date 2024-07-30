@@ -219,7 +219,7 @@ private:
   {
     size_t x500_index = 2;
     auto pose = msg->poses[x500_index];
-    RCLCPP_INFO(this->get_logger(), "GT: X: %f m / Y: %f m / Z: %f", pose.position.x, pose.position.y,  pose.position.z);
+    //RCLCPP_INFO(this->get_logger(), "GT: X: %f m / Y: %f m / Z: %f", pose.position.x, pose.position.y,  pose.position.z);
 
 
     if (this->image_received_)
@@ -227,7 +227,7 @@ private:
       if (gt_pose_file_.is_open() && waypoint_id_gt == this->image_count_)
       {
         // Write data (x and y switched to matct matlab and localvehicle setpoint frame )
-        gt_pose_file_ << "wp " << waypoint_id_gt-1 << "," << pose.position.y << "," << pose.position.x << "," << pose.position.z << "," << pose.orientation.x << "," << pose.orientation.y << "," << pose.orientation.z << "," << pose.orientation.w << std::endl;
+        gt_pose_file_ << "wp " << waypoint_id_gt-1 << "," << pose.position.y << "," << pose.position.x << "," << pose.position.z << "," << pose.orientation.y << "," << pose.orientation.x << "," << pose.orientation.z << "," << pose.orientation.w << std::endl;
         RCLCPP_INFO(this->get_logger(), "Ground truth pose saved");
 
 

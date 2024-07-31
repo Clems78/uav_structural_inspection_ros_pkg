@@ -164,6 +164,8 @@ public:
                 // Arm the vehicle
                 this->arm();
                 this->publish_vehicle_command(VehicleCommand::VEHICLE_CMD_DO_CHANGE_SPEED, 1, 1);
+                this->publish_vehicle_command(VehicleCommand::VEHICLE_CMD_SET_GPS_GLOBAL_ORIGIN, 0, 0, 0, 0, 47.397971057728974, 8.546163739800146, 0);
+
             }
 
             // OffboardControlMode needs to be paired with TrajectorySetpoint
@@ -278,7 +280,7 @@ void local_position_callback(const px4_msgs::msg::VehicleLocalPosition::SharedPt
 
     // Function 
     void publish_offboard_control_mode();
-    void publish_vehicle_command(uint16_t command, float param1 = 0.0, float param2 = 0.0, float param3 = 0.0, float param4 = 0.0, float param5 = 0.0, float param6 = 0.0, float param7 = 0.0);
+    void publish_vehicle_command(uint32_t command, float param1 = 0.0, float param2 = 0.0, float param3 = 0.0, float param4 = 0.0, float param5 = 0.0, float param6 = 0.0, float param7 = 0.0);
     void publish_trajectory_setpoint(std::vector<float> waypoints);
     bool check_waypoint_reached(std::vector<float> waypoint, std::vector<float> local_position);
     void capture_image_call();
@@ -408,7 +410,7 @@ void OffboardControl::publish_trajectory_setpoint(const std::vector<float> waypo
  * @param param6    Command parameter 6
  * @param param7    Command parameter 7
  */
-void OffboardControl::publish_vehicle_command(uint16_t command, float param1, float param2, float param3, float param4, float param5, float param6, float param7)
+void OffboardControl::publish_vehicle_command(uint32_t command, float param1, float param2, float param3, float param4, float param5, float param6, float param7)
 {
     VehicleCommand msg{};
     msg.param1 = param1;

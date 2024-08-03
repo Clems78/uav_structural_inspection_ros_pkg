@@ -18,6 +18,13 @@
   <depend>cv_bridge</depend>
   <depend>OpenCV</depend>
   <depend>geometry_msgs</depend>
+  <depend>nav_msgs</depend>
+  <depend>mavros_msgs</depend>
+  <depend>mavros</depend>
+  <depend>tf2_ros</depend>
+
+
+
 
 
 

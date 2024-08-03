@@ -16,6 +16,13 @@ find_package(sensor_msgs REQUIRED)
 find_package(cv_bridge REQUIRED)
 find_package(OpenCV REQUIRED)
 find_package(geometry_msgs REQUIRED)
+find_package(nav_msgs REQUIRED)
+find_package(mavros_msgs REQUIRED)
+find_package(mavros REQUIRED)
+find_package(tf2_ros REQUIRED)
+
+
+
 
 
 if(BUILD_TESTING)
@@ -35,7 +42,10 @@ add_executable(wp_nav src/wp_nav.cpp)
 ament_target_dependencies(wp_nav rclcpp px4_msgs px4_ros_com std_srvs)
 
 add_executable(wp_camera_service_server src/wp_camera_service_server.cpp)
-ament_target_dependencies(wp_camera_service_server rclcpp std_msgs sensor_msgs cv_bridge OpenCV std_srvs px4_msgs geometry_msgs)
+ament_target_dependencies(wp_camera_service_server rclcpp std_msgs sensor_msgs cv_bridge OpenCV std_srvs px4_msgs geometry_msgs nav_msgs)
+
+add_executable(odom_publisher src/odom_publisher.cpp)
+ament_target_dependencies(odom_publisher rclcpp nav_msgs px4_msgs mavros_msgs mavros tf2_ros)
 
 #add_executable(waypoint_navigator src/waypoint_navigator.cpp)
 #ament_target_dependencies(waypoint_navigator rclcpp px4_msgs px4_ros_com std_srvs)
@@ -45,6 +55,7 @@ install(TARGETS
   wp_nav
   wp_camera_service_server
   #waypoint_navigator
+  odom_publisher
   DESTINATION lib/${PROJECT_NAME}
  )
 

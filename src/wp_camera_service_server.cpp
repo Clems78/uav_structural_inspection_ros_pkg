@@ -14,6 +14,9 @@
 #include <px4_msgs/msg/vehicle_local_position.hpp>
 #include <geometry_msgs/msg/pose_array.hpp>
 
+#include <nav_msgs/msg/odometry.hpp>
+
+
 
 
 namespace fs = std::filesystem;
@@ -28,6 +31,8 @@ public:
     position_callback_group_ = this->create_callback_group(rclcpp::CallbackGroupType::MutuallyExclusive);
     image_callback_group_ = this->create_callback_group(rclcpp::CallbackGroupType::MutuallyExclusive);
     gt_pose_callback_group_ = this->create_callback_group(rclcpp::CallbackGroupType::MutuallyExclusive);
+    gt_vision_pose_callback_group_ = this->create_callback_group(rclcpp::CallbackGroupType::MutuallyExclusive);
+
 
     //Define options for subscribers
     rclcpp::SubscriptionOptions options_position;
@@ -39,12 +44,16 @@ public:
     rclcpp::SubscriptionOptions options_gt_pose;
     options_gt_pose.callback_group = gt_pose_callback_group_;
 
+    rclcpp::SubscriptionOptions options_gt_vision_pose;
+    options_gt_vision_pose.callback_group = gt_vision_pose_callback_group_;
+
     // Define QoS settings to match publisher
     auto qos = rclcpp::QoS(rclcpp::QoSInitialization::from_rmw(rmw_qos_profile_default))
                       .reliability(RMW_QOS_POLICY_RELIABILITY_BEST_EFFORT)
                       .durability(RMW_QOS_POLICY_DURABILITY_TRANSIENT_LOCAL);
 
-
+    rmw_qos_profile_t qos_profile = rmw_qos_profile_sensor_data;
+    auto qos_2 = rclcpp::QoS(rclcpp::QoSInitialization(qos_profile.history, 5), qos_profile);
 
     // Publisher to send the trigger signal
     trigger_pub_ = this->create_publisher<std_msgs::msg::Bool>("/trigger", 10);
@@ -57,7 +66,8 @@ public:
 
     position_sub_ = this->create_subscription<px4_msgs::msg::VehicleLocalPosition>("/fmu/out/vehicle_local_position", qos, std::bind(&WaypointCameraService::local_position_callback, this, std::placeholders::_1), options_position);
 
-    gt_pose_sub_ = this->create_subscription<geometry_msgs::msg::PoseArray>("/world/irp/pose/info", 10, std::bind(&WaypointCameraService::gt_pose_callback, this, std::placeholders::_1), options_gt_pose);
+    //gt_pose_sub_ = this->create_subscription<geometry_msgs::msg::PoseArray>("/world/irp/pose/info", 10, std::bind(&WaypointCameraService::gt_pose_callback, this, std::placeholders::_1), options_gt_pose);
+    gt_vision_pose_sub_ = this->create_subscription<nav_msgs::msg::Odometry>("/model/x500_vision_0/odometry_with_covariance", qos_2, std::bind(&WaypointCameraService::gt_vision_pose_callback, this, std::placeholders::_1), options_gt_vision_pose);
 
     // Create directory if it doesn't exist
     fs::path save_dir = fs::path(getenv("HOME")) / "ros_saved_images";
@@ -215,21 +225,43 @@ private:
     }
   }
 
-  void gt_pose_callback(const geometry_msgs::msg::PoseArray::SharedPtr msg)
-  {
-    size_t x500_index = 2;
-    auto pose = msg->poses[x500_index];
-    //RCLCPP_INFO(this->get_logger(), "GT: X: %f m / Y: %f m / Z: %f", pose.position.x, pose.position.y,  pose.position.z);
+  // void gt_pose_callback(const geometry_msgs::msg::PoseArray::SharedPtr msg)
+  // {
+  //   size_t x500_index = 2;
+  //   auto pose = msg->poses[x500_index];
+  //   bool selected = false;
+  //   //RCLCPP_INFO(this->get_logger(), "GT: X: %f m / Y: %f m / Z: %f", pose.position.x, pose.position.y,  pose.position.z);
 
+
+  //   if (this->image_received_ && selected == true)
+  //   {
+  //     if (gt_pose_file_.is_open() && waypoint_id_gt == this->image_count_)
+  //     {
+  //       // Write data (x and y switched to matct matlab and localvehicle setpoint frame )
+  //       gt_pose_file_ << "wp " << waypoint_id_gt-1 << "," << pose.position.y << "," << pose.position.x << "," << pose.position.z << "," << pose.orientation.y << "," << pose.orientation.x << "," << pose.orientation.z << "," << pose.orientation.w << std::endl;
+  //       RCLCPP_INFO(this->get_logger(), "Ground truth pose saved");
+
+
+  //       // Increment waypoint_id for next waypoint
+  //       waypoint_id_gt++;
+  //     }
+  //   }
+  // }
+
+
+  void gt_vision_pose_callback(const nav_msgs::msg::Odometry::SharedPtr msg)
+  {
+    //auto pose = msg->poses[x500_index];
+    RCLCPP_INFO(this->get_logger(), "GT: X: %f m / Y: %f m / Z: %f", msg->pose.pose.position.y, msg->pose.pose.position.x,  msg->pose.pose.position.z);
+    RCLCPP_INFO(this->get_logger(), "Image count %d", this->image_count_);
 
     if (this->image_received_)
     {
       if (gt_pose_file_.is_open() && waypoint_id_gt == this->image_count_)
       {
         // Write data (x and y switched to matct matlab and localvehicle setpoint frame )
-        gt_pose_file_ << "wp " << waypoint_id_gt-1 << "," << pose.position.y << "," << pose.position.x << "," << pose.position.z << "," << pose.orientation.y << "," << pose.orientation.x << "," << pose.orientation.z << "," << pose.orientation.w << std::endl;
+        gt_pose_file_ << "wp " << waypoint_id_gt-1 << "," << msg->pose.pose.position.y << "," << msg->pose.pose.position.x << "," << msg->pose.pose.position.z << "," << msg->pose.pose.orientation.y << "," << msg->pose.pose.orientation.x << "," << msg->pose.pose.orientation.z << "," << msg->pose.pose.orientation.w << std::endl;
         RCLCPP_INFO(this->get_logger(), "Ground truth pose saved");
-
 
         // Increment waypoint_id for next waypoint
         waypoint_id_gt++;
@@ -241,6 +273,8 @@ private:
   rclcpp::CallbackGroup::SharedPtr position_callback_group_;
   rclcpp::CallbackGroup::SharedPtr image_callback_group_;
   rclcpp::CallbackGroup::SharedPtr gt_pose_callback_group_;
+  rclcpp::CallbackGroup::SharedPtr gt_vision_pose_callback_group_;
+
 
 
   // Pub and Sub and Serv
@@ -248,7 +282,9 @@ private:
   rclcpp::Service<std_srvs::srv::Trigger>::SharedPtr service_;
   rclcpp::Subscription<sensor_msgs::msg::Image>::SharedPtr image_sub_;
   rclcpp::Subscription<px4_msgs::msg::VehicleLocalPosition>::SharedPtr position_sub_;
-  rclcpp::Subscription<geometry_msgs::msg::PoseArray>::SharedPtr gt_pose_sub_;
+  //rclcpp::Subscription<geometry_msgs::msg::PoseArray>::SharedPtr gt_pose_sub_;
+  rclcpp::Subscription<nav_msgs::msg::Odometry>::SharedPtr gt_vision_pose_sub_;
+
 
 
   // Variables

@@ -163,7 +163,7 @@ public:
 
                 // Arm the vehicle
                 this->arm();
-                this->publish_vehicle_command(VehicleCommand::VEHICLE_CMD_DO_CHANGE_SPEED, 1, 1);
+                this->publish_vehicle_command(VehicleCommand::VEHICLE_CMD_DO_CHANGE_SPEED, 1, 0.5);
                 this->publish_vehicle_command(VehicleCommand::VEHICLE_CMD_SET_GPS_GLOBAL_ORIGIN, 0, 0, 0, 0, 47.397971057728974, 8.546163739800146, 0);
 
             }
@@ -330,6 +330,8 @@ bool OffboardControl::check_waypoint_reached(std::vector<float> waypoint, std::v
         capture_image_call();
         RCLCPP_INFO(this->get_logger(), "Waypoint %d reached", current_waypoint_);
         //this-> wp_flag_ = true;
+        this->publish_vehicle_command(VehicleCommand::VEHICLE_CMD_DO_CHANGE_SPEED, 1, 0.5);
+
 
         //std::cout << std::boolalpha;  // Enable textual representation of boolean values
         //std::cout << "Service done status: " << service_done_ << std::endl;

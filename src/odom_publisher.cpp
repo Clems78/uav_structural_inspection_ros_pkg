@@ -42,6 +42,8 @@ public:
            
         // Publish Static Transform
         publish_static_transform();
+        publish_static_transform_2();
+
     }
 
 private:
@@ -63,7 +65,7 @@ private:
         //uint8_t pose_frame_odom = 1;
 
         //uint8_t velocity_frame_odom = 0;
-        bool mavros = true;
+        bool mavros = false;
 
         if (mavros == false)
         {
@@ -96,10 +98,10 @@ private:
 
             //create the message
             odom_msg.timestamp = this->get_clock()->now().nanoseconds() / 1000;
-            //odom_msg.pose_frame = px4_msgs::msg::VehicleOdometry::POSE_FRAME_NED;
+            odom_msg.pose_frame = px4_msgs::msg::VehicleOdometry::POSE_FRAME_NED;
             odom_msg.position = position_odom;
             odom_msg.q = q_odom;
-            //odom_msg.velocity_frame = px4_msgs::msg::VehicleOdometry::VELOCITY_FRAME_BODY_FRD;
+            odom_msg.velocity_frame = px4_msgs::msg::VehicleOdometry::VELOCITY_FRAME_BODY_FRD;
             odom_msg.velocity = velocity_odom;
             odom_msg.angular_velocity = angular_velocity_odom;
             odom_msg.position_variance = position_variance_odom;
@@ -130,6 +132,25 @@ private:
         static_transform_stamped.transform.rotation.y = 0.0;
         static_transform_stamped.transform.rotation.z = 0.0;
         static_transform_stamped.transform.rotation.w = 1.0;
+
+        static_broadcaster.sendTransform(static_transform_stamped);
+    }
+
+        void publish_static_transform_2()
+    {
+        static tf2_ros::StaticTransformBroadcaster static_broadcaster(this);
+        geometry_msgs::msg::TransformStamped static_transform_stamped;
+
+        static_transform_stamped.header.stamp = this->now();
+        static_transform_stamped.header.frame_id = "x500_vision_0/base_footprint";
+        static_transform_stamped.child_frame_id = "x500_vision_0/base_footprint_frd";
+        static_transform_stamped.transform.translation.x = 0.0;
+        static_transform_stamped.transform.translation.y = 0.0;
+        static_transform_stamped.transform.translation.z = 0.0;
+        static_transform_stamped.transform.rotation.x = 1;
+        static_transform_stamped.transform.rotation.y = 0.0;
+        static_transform_stamped.transform.rotation.z = 0.0;
+        static_transform_stamped.transform.rotation.w = 0.0;
 
         static_broadcaster.sendTransform(static_transform_stamped);
     }
